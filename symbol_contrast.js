@@ -213,7 +213,7 @@ async function analyzeOne(file, opts) {
       pushIf(x, y - 1);
     }
 
-    const fg = new Uint8Array(width * height);
+    let fg = new Uint8Array(width * height);
     let fgCount = 0;
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
@@ -224,7 +224,40 @@ async function analyzeOne(file, opts) {
         }
       }
     }
-    const bgCount = width * height - fgCount;
+    let bgCount = width * height - fgCount;
+
+    // Fallback: if no background was reached from borders, use global near-bg pixels
+    let usedGlobalBg = false;
+    if (bgCount === 0) {
+      const globalBg = new Uint8Array(width * height);
+      let globalCount = 0;
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const p = y * width + x;
+          const i = idx(x, y);
+          if (isNearBg(raw[i], raw[i + 1], raw[i + 2], raw[i + 3])) {
+            globalBg[p] = 1;
+            globalCount++;
+          }
+        }
+      }
+      if (globalCount > 0) {
+        usedGlobalBg = true;
+        bg.set(globalBg);
+        fg = new Uint8Array(width * height);
+        fgCount = 0;
+        for (let y = 0; y < height; y++) {
+          for (let x = 0; x < width; x++) {
+            const p = y * width + x;
+            if (!bg[p]) {
+              fg[p] = 1;
+              fgCount++;
+            }
+          }
+        }
+        bgCount = width * height - fgCount;
+      }
+    }
 
     // Edge band: fg pixels within bandRadius of bg (simple neighborhood scan)
     const band = new Uint8Array(width * height);
@@ -318,7 +351,13 @@ async function analyzeOne(file, opts) {
       file,
       size: { width, height },
       params: { ...opts },
-      segmentation: { fgPixels: fgCount, bgPixels: bgCount, bandPixels: bandCount, usedBorderBand },
+      segmentation: {
+        fgPixels: fgCount,
+        bgPixels: bgCount,
+        bandPixels: bandCount,
+        usedBorderBand,
+        usedGlobalBg,
+      },
       backgrounds: perBg,
       pass: { overall, byBackground },
     };
