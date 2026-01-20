@@ -2,7 +2,7 @@
 /**
  * symbol_contrast.js
  *
- * Contrast audit for multi-colour symbols (PNG/JPG/JPEG) against solid backgrounds.
+ * Contrast audit for multi-colour symbols (PNG/JPG/JPEG/SVG) against solid backgrounds.
  *
  * Segmentation:
  *  - Flood-fill "near-white" pixels from the image border to identify background
@@ -27,15 +27,14 @@
  *   --bg <color>          Background color to test (repeatable). Default: white + black
  *   --segBg <color>       Background color used for flood-fill segmentation (default: first --bg or white)
  *   --alphaBg 10          Treat pixels with alpha <= this as background in segmentation
+ *   --minAlpha 200        Only evaluate pixels with alpha >= this (helps ignore anti-aliased edges)
  *   --svgDensity 300      Density for SVG rasterization
- *   --vectorDensity 300   Density for EMF/WMF rasterization (ImageMagick)
  *   --csv <path>          Write CSV report to path (folder or single file)
  */
 
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
-const { spawnSync } = require("child_process");
 const sharp = require("sharp");
 
 const getArg = (name, def) => {
@@ -141,56 +140,10 @@ function parseColor(input) {
   throw new Error(`Invalid color: ${input}`);
 }
 
-let cachedMagickCmd;
-function findMagickCmd() {
-  if (cachedMagickCmd !== undefined) return cachedMagickCmd;
-  for (const cmd of ["magick", "convert"]) {
-    const res = spawnSync(cmd, ["-version"], { stdio: "ignore" });
-    if (!res.error && res.status === 0) {
-      cachedMagickCmd = cmd;
-      return cachedMagickCmd;
-    }
-  }
-  cachedMagickCmd = null;
-  return cachedMagickCmd;
-}
-
-function convertVectorToPng(file, opts) {
-  const cmd = findMagickCmd();
-  if (!cmd) throw new Error("ImageMagick not found (magick/convert) for EMF/WMF conversion");
-
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "symbol-contrast-"));
-  const outPath = path.join(tmpDir, `${path.basename(file)}.png`);
-  const args =
-    cmd === "magick"
-      ? ["-density", String(opts.vectorDensity), file, "-background", "none", "-alpha", "on", outPath]
-      : ["-density", String(opts.vectorDensity), file, "-background", "none", "-alpha", "on", outPath];
-  const res = spawnSync(cmd, args, { encoding: "utf8" });
-  if (res.error || res.status !== 0) {
-    const msg = res.error ? res.error.message : res.stderr;
-    throw new Error(`ImageMagick convert failed for ${file}: ${msg}`);
-  }
-  return {
-    path: outPath,
-    cleanup: () => {
-      try {
-        fs.unlinkSync(outPath);
-      } catch {}
-      try {
-        fs.rmdirSync(tmpDir);
-      } catch {}
-    },
-  };
-}
-
 async function openImage(file, opts) {
   const ext = path.extname(file).toLowerCase();
   if (ext === ".svg") {
     return { image: sharp(file, { density: opts.svgDensity }), cleanup: null };
-  }
-  if (ext === ".emf" || ext === ".wmf") {
-    const conv = convertVectorToPng(file, opts);
-    return { image: sharp(conv.path), cleanup: conv.cleanup };
   }
   return { image: sharp(file), cleanup: null };
 }
@@ -207,6 +160,7 @@ async function analyzeOne(file, opts) {
   const threshold = opts.threshold;
   const maxPctBelow = opts.maxPctBelow;
   const p = opts.p;
+  const minAlpha = opts.minAlpha;
 
   const { image, cleanup } = await openImage(file, opts);
   try {
@@ -270,29 +224,46 @@ async function analyzeOne(file, opts) {
         }
       }
     }
+    const bgCount = width * height - fgCount;
 
     // Edge band: fg pixels within bandRadius of bg (simple neighborhood scan)
     const band = new Uint8Array(width * height);
     let bandCount = 0;
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        const p = y * width + x;
-        if (!fg[p]) continue;
-        let near = false;
-        for (let dy = -bandRadius; dy <= bandRadius && !near; dy++) {
-          for (let dx = -bandRadius; dx <= bandRadius; dx++) {
-            const xx = x + dx,
-              yy = y + dy;
-            if (xx < 0 || yy < 0 || xx >= width || yy >= height) continue;
-            if (bg[yy * width + xx]) {
-              near = true;
-              break;
-            }
+    let usedBorderBand = false;
+    if (bgCount === 0) {
+      usedBorderBand = true;
+      const edge = Math.max(0, bandRadius);
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const p = y * width + x;
+          if (!fg[p]) continue;
+          if (x <= edge || y <= edge || x >= width - 1 - edge || y >= height - 1 - edge) {
+            band[p] = 1;
+            bandCount++;
           }
         }
-        if (near) {
-          band[p] = 1;
-          bandCount++;
+      }
+    } else {
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const p = y * width + x;
+          if (!fg[p]) continue;
+          let near = false;
+          for (let dy = -bandRadius; dy <= bandRadius && !near; dy++) {
+            for (let dx = -bandRadius; dx <= bandRadius; dx++) {
+              const xx = x + dx,
+                yy = y + dy;
+              if (xx < 0 || yy < 0 || xx >= width || yy >= height) continue;
+              if (bg[yy * width + xx]) {
+                near = true;
+                break;
+              }
+            }
+          }
+          if (near) {
+            band[p] = 1;
+            bandCount++;
+          }
         }
       }
     }
@@ -311,6 +282,7 @@ async function analyzeOne(file, opts) {
             g = raw[i + 1],
             b = raw[i + 2],
             a = raw[i + 3];
+          if (a < minAlpha) continue;
           const cr = contrastRatioPixelVsBg(r, g, b, a, bgColor);
           ratios.push(cr);
           if (cr < worst) {
@@ -346,7 +318,7 @@ async function analyzeOne(file, opts) {
       file,
       size: { width, height },
       params: { ...opts },
-      segmentation: { fgPixels: fgCount, bandPixels: bandCount },
+      segmentation: { fgPixels: fgCount, bgPixels: bgCount, bandPixels: bandCount, usedBorderBand },
       backgrounds: perBg,
       pass: { overall, byBackground },
     };
@@ -360,7 +332,7 @@ function listImagesRec(dir) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const p = path.join(dir, entry.name);
     if (entry.isDirectory()) out.push(...listImagesRec(p));
-    else if (/\.(png|jpe?g|svg|emf|wmf)$/i.test(entry.name)) out.push(p);
+    else if (/\.(png|jpe?g|svg)$/i.test(entry.name)) out.push(p);
   }
   return out;
 }
@@ -388,8 +360,8 @@ async function main() {
     backgrounds,
     segBg,
     alphaBg: parseInt(getArg("--alphaBg", "10"), 10),
+    minAlpha: parseInt(getArg("--minAlpha", "200"), 10),
     svgDensity: parseInt(getArg("--svgDensity", "300"), 10),
-    vectorDensity: parseInt(getArg("--vectorDensity", "300"), 10),
   };
 
   const st = fs.statSync(target);
