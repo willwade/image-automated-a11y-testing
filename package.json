@@ -1,0 +1,15 @@
+{
+  "name": "image-automated-a11y-testing",
+  "version": "1.0.0",
+  "description": "node symbol_contrast.js /mnt/data/911B40FE-9ED9-422A-A04D-CDEB6E50062E.jpeg --nearWhiteDist 180 --bandRadius 2",
+  "main": "symbol_contrast.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "sharp": "^0.34.5"
+  }
+}
