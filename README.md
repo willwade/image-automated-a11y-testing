@@ -32,6 +32,10 @@ What it does
 - Measures WCAG contrast for foreground edge pixels against each background
 - Reports per-background stats and a pass/fail
 
+Browser tool (no build step)
+- Open `web/index.html` in a browser
+- Drop in a symbol to analyze and highlight failing pixels
+
 Options
 - `--nearBgDist 160` (alias `--nearWhiteDist`) Background color distance for flood-fill segmentation
 - `--segBg <color>` Background color used for segmentation (defaults to first `--bg` or white)

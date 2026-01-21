@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Symbol Contrast Studio</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+
+    <main class="app">
+      <header class="hero">
+        <p class="eyebrow">SVG-first contrast explorer</p>
+        <h1>Symbol Contrast Studio</h1>
+        <p class="subtitle">
+          Drop in a symbol and inspect contrast against a solid background. Failing
+          pixels glow hot.
+        </p>
+      </header>
+
+      <section class="panels">
+        <div class="panel controls">
+          <div class="drop" id="dropZone">
+            <input
+              type="file"
+              id="fileInput"
+              accept=".svg,.png,.jpg,.jpeg,image/svg+xml,image/png,image/jpeg"
+            />
+            <div class="drop-text">
+              <strong>Drop a file</strong>
+              <span>or click to browse</span>
+            </div>
+          </div>
+
+          <div class="group">
+            <h2>Background</h2>
+            <label>
+              <span>Contrast background</span>
+              <input type="color" id="bgColor" value="#ffffff" />
+            </label>
+            <label class="inline">
+              <input type="checkbox" id="segMatchesBg" checked />
+              <span>Use same color for segmentation</span>
+            </label>
+            <label>
+              <span>Segmentation color</span>
+              <input type="color" id="segColor" value="#ffffff" />
+            </label>
+          </div>
+
+          <div class="group">
+            <h2>Thresholds</h2>
+            <label>
+              <span>Contrast threshold</span>
+              <input type="number" id="threshold" value="3" step="0.1" min="1" />
+            </label>
+            <label>
+              <span>Max percent below</span>
+              <input type="number" id="maxPctBelow" value="2" step="0.1" min="0" />
+            </label>
+            <label>
+              <span>Percentile (p)</span>
+              <input type="number" id="percentile" value="0.05" step="0.01" min="0" max="1" />
+            </label>
+          </div>
+
+          <div class="group">
+            <h2>Segmentation</h2>
+            <label>
+              <span>Near background distance</span>
+              <input type="number" id="nearBgDist" value="160" min="0" />
+            </label>
+            <label>
+              <span>Band radius (px)</span>
+              <input type="number" id="bandRadius" value="2" min="0" />
+            </label>
+            <label>
+              <span>Alpha background cutoff</span>
+              <input type="number" id="alphaBg" value="10" min="0" max="255" />
+            </label>
+            <label>
+              <span>Min alpha to test</span>
+              <input type="number" id="minAlpha" value="200" min="0" max="255" />
+            </label>
+          </div>
+
+          <div class="group">
+            <h2>Analysis</h2>
+            <label>
+              <span>Sample mode</span>
+              <select id="sampleMode">
+                <option value="edge">Edge band</option>
+                <option value="all">All foreground</option>
+                <option value="stroke">Stroke-only (dark)</option>
+              </select>
+            </label>
+            <label>
+              <span>Stroke luminance max</span>
+              <input type="number" id="strokeLumaMax" value="0.25" step="0.01" min="0" max="1" />
+            </label>
+          </div>
+
+          <div class="group">
+            <h2>Render</h2>
+            <label>
+              <span>Max dimension (px)</span>
+              <input type="number" id="maxSize" value="900" min="100" />
+            </label>
+            <label>
+              <span>SVG scale</span>
+              <input type="number" id="svgScale" value="1" step="0.1" min="0.25" />
+            </label>
+            <label class="inline">
+              <input type="checkbox" id="showHighlight" checked />
+              <span>Highlight failing pixels</span>
+            </label>
+          </div>
+
+          <button class="run" id="runBtn">Run analysis</button>
+          <div class="status" id="status">Load an image to begin.</div>
+        </div>
+
+        <div class="panel preview">
+          <div class="preview-head">
+            <div>
+              <h2 id="fileName">No file loaded</h2>
+              <p id="fileMeta">Drop an SVG, PNG, or JPG.</p>
+            </div>
+            <div class="badge" id="passBadge">Waiting</div>
+          </div>
+
+          <div class="canvas-wrap">
+            <canvas id="baseCanvas"></canvas>
+            <canvas id="overlayCanvas"></canvas>
+          </div>
+
+          <div class="stats" id="stats">
+            <div>
+              <span>pX</span>
+              <strong id="statPX">-</strong>
+            </div>
+            <div>
+              <span>% below</span>
+              <strong id="statPctBelow">-</strong>
+            </div>
+            <div>
+              <span>Min</span>
+              <strong id="statMin">-</strong>
+            </div>
+            <div>
+              <span>Median</span>
+              <strong id="statMedian">-</strong>
+            </div>
+            <div>
+              <span>Pixels tested</span>
+              <strong id="statCount">-</strong>
+            </div>
+            <div>
+              <span>Mask pixels</span>
+              <strong id="statBand">-</strong>
+            </div>
+          </div>
+
+          <p class="note">
+            Transparent pixels are composited against the selected background for contrast.
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>

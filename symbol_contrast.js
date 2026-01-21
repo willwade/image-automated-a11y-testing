@@ -29,6 +29,7 @@
  *   --alphaBg 10          Treat pixels with alpha <= this as background in segmentation
  *   --minAlpha 200        Only evaluate pixels with alpha >= this (helps ignore anti-aliased edges)
  *   --svgDensity 300      Density for SVG rasterization
+ *   --ext svg             Limit to specific file extensions (repeatable, default: png,jpg,jpeg,svg)
  *   --csv <path>          Write CSV report to path (folder or single file)
  */
 
@@ -366,12 +367,12 @@ async function analyzeOne(file, opts) {
   }
 }
 
-function listImagesRec(dir) {
+function listImagesRec(dir, exts) {
   const out = [];
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const p = path.join(dir, entry.name);
-    if (entry.isDirectory()) out.push(...listImagesRec(p));
-    else if (/\.(png|jpe?g|svg)$/i.test(entry.name)) out.push(p);
+    if (entry.isDirectory()) out.push(...listImagesRec(p, exts));
+    else if (exts.has(path.extname(entry.name).toLowerCase())) out.push(p);
   }
   return out;
 }
@@ -403,8 +404,16 @@ async function main() {
     svgDensity: parseInt(getArg("--svgDensity", "300"), 10),
   };
 
+  const extArgs = getArgs("--ext")
+    .flatMap((arg) => arg.split(","))
+    .map((ext) => ext.trim().toLowerCase())
+    .filter(Boolean)
+    .map((ext) => (ext.startsWith(".") ? ext : `.${ext}`));
+  const exts =
+    extArgs.length > 0 ? new Set(extArgs) : new Set([".png", ".jpg", ".jpeg", ".svg"]);
+
   const st = fs.statSync(target);
-  const files = st.isDirectory() ? listImagesRec(target) : [target];
+  const files = st.isDirectory() ? listImagesRec(target, exts) : [target];
 
   const results = [];
   for (const f of files) {
